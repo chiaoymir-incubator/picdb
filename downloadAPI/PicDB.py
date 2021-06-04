@@ -18,6 +18,13 @@ class PicDB:
         self.db_collection = 'images'
 
     def init(self, dir_path="images", uri='mongodb://localhost:27017/'):
+        """Initialize database connection and config setup
+        config example:
+            home_path: /Users/chiao1
+            store_path: /Users/chiao1/.picdb
+            dir_path: /Users/chiao1/.picdb/images
+            uri: mongodb://localhost:27017/
+        """
         home_path = str(Path.home())
         store_path = '.picdb'
         config_path = os.path.join(home_path, store_path, '.config')
@@ -107,25 +114,58 @@ class PicDB:
         print(f'uri: {self.uri}')
         print()
 
-    def download(self, tags=["images"], img_type="jpg"):
-        images = self.collection.find(
-            {"tags.image": {"$exists": True, "$gt": 50}, "img_type": img_type}, {"img_id": 1, "_id": 0})
+    def get_images(self, tags=["cats"], img_type="jpg", threshold=0, use_count=0, update=False, create_cache=True):
+        """
+        Get Image from database
 
-        images_list = set(map(lambda x: x['img_id']))
-        config = self._load_download_config()
-        downloaded_list = config['list']
+        Parameters:
+        ----------
+        tags: List[String]
+            the provided tags to select images from database
 
-        # Compare with downloaded list
-        if downloaded_list:
-            download_list = filter(
-                lambda x: x not in downloaded_list, images_list)
+        img_type: "jpg" or "png"
+            specify the type of the images
+
+        threshold: Int
+            the credit threshold to select from database
+            (may support list of number later)
+
+        use_count: Int
+            the use count of the selected images
+
+        update: Bool
+            if update is true, the method will always fetch from database instead of using local cache list
+
+        """
+        cache_path = '.' + '-'.join(sorted(tags)) + '.config'
+        cache_exists = os.path.isfile(cache_path)
+
+        if update or not cache_exists:
+            # Find image id by given conditions
+            images_list = self._get_images_id_from_database(
+                tags, img_type, threshold, use_count)
+
         else:
-            download_list = images_list
+            # Read from local cache
+            # For example, .cats.config, .cats-orange.config
+            images_list = self._read_downloaded_cache(cache_path)
 
-        images = self.collection.find(
-            {"img_id": {}}, {"img_id": 1, "content": 1, "_id": 0})
+        # Compare with the downloaded list
+        downloaded_list = self._get_dir_images_list()
 
-        for image in images:
+        # Filter out downloaded images
+        if downloaded_list:
+            to_download_list = list(set(images_list) - set(downloaded_list))
+
+        else:
+            to_download_list = images_list
+
+        # Actually retrieve undownloaded images
+        download_images = self._get_images_content_from_database(
+            to_download_list)
+
+        # Save images based on their ids
+        for image in download_images:
             path = os.path.join(
                 self.dir_path, image["img_id"] + '.' + image["img_type"])
             print(
@@ -133,24 +173,69 @@ class PicDB:
             with open(path, "wb") as f:
                 f.write(image["content"])
 
-    def _store_download_config(self, store_config):
-        config_path = os.path.join(self.dir_path, '.config')
-        with open("store.config", "wb") as f:  # Pickling
-            pickle.dump(store_config, f)
+        # Save cache ids in local database
+        if create_cache:
+            all_images_list = list(set(images_list) | set(to_download_list))
+            self._store_downloaded_cache(all_images_list, cache_path)
 
-    def _load_download_config(self):
-        config_path = os.path.join(self.dir_path, '.config')
+    def _get_images_id_from_database(self, tags=["cats"], img_type="jpg", threshold=0, use_count=0):
+        # TODO: add code to query server index first
+        # TODO: server may implement several level indexing
+        images = self.collection.find(
+            {"tags": {"$all": tags},
+             "img_type": img_type,
+             "use_count": {"$gt": use_count}},
+            {"img_id": 1,
+             "_id": 0})
 
-        if not os.path.isfile(config_path):
-            return dict()
+        images_list = [image['img_id'] for image in images]
 
-        with open(config_path, "rb") as f:   # Unpickling
-            read_config = pickle.load(f)
+        return images_list
 
-        return read_config
+    def _get_images_content_from_database(self, images_list):
+        images = self.collection.find(
+            {"img_id": {"$in": images_list}}, {"img_id": 1, "content": 1, "img_type": 1, "_id": 0})
+
+        images_list = [image for image in images]
+
+        return images_list
+
+    def _store_downloaded_cache(self, store_cache, prefix):
+        cache_path = os.path.join(self.dir_path, 'config')
+        if not os.path.isdir(cache_path):
+            os.mkdir(cache_path)
+
+        cache_file_path = os.path.join(cache_path, prefix + '.config')
+        with open(cache_file_path, "wb") as f:  # Pickling
+            pickle.dump(store_cache, f)
+
+    def _read_downloaded_cache(self, prefix):
+        cache_path = os.path.join(self.dir_path, 'config')
+        if not os.path.isdir(cache_path):
+            return
+
+        cache_file_path = os.path.join(cache_path, prefix + '.config')
+        if not os.path.isfile(cache_file_path):
+            return
+
+        with open(cache_file_path, "rb") as f:
+            downloaded_cache = pickle.load(f)
+
+        return downloaded_cache
+
+    def _get_dir_images_list(self):
+        _, _, filenames = next(walk(self.dir_path))
+
+        images_list = [filename.split('.')[0] for filename in filenames]
+
+        return images_list
+
+
+def test_download():
+    pass
 
 
 if __name__ == '__main__':
     pic_db = PicDB()
     pic_db.init()
-    pic_db.download()
+    # pic_db.get_images()
