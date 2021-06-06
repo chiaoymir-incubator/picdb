@@ -10,6 +10,7 @@ import pymongo
 from pymongo import MongoClient
 import bson
 from bson.binary import Binary
+from bson.objectid import ObjectId
 
 
 class PicDB:
@@ -107,14 +108,14 @@ class PicDB:
         if not os.path.isdir(self.dir_path):
             os.mkdir(self.dir_path)
 
-        print(f'Config: --------')
-        print(f'home_path: {self.home_path}')
-        print(f'store_path: {self.store_path}')
-        print(f'dir_path: {self.dir_path}')
-        print(f'uri: {self.uri}')
-        print()
+        # print(f'Config: --------')
+        # print(f'home_path: {self.home_path}')
+        # print(f'store_path: {self.store_path}')
+        # print(f'dir_path: {self.dir_path}')
+        # print(f'uri: {self.uri}')
+        # print()
 
-    def get_images(self, tags=["cats"], img_type="jpg", threshold=0, use_count=0, update=False, create_cache=True, limit=100):
+    def get_images(self, tags=["cats"], img_type="jpg", use_count=-1, limit=100, use_cache=True, create_cache=True, cache_version=0, next_cache_name="latest"):
         """
         Get Image from database
 
@@ -137,43 +138,40 @@ class PicDB:
             if update is true, the method will always fetch from database instead of using local cache list
 
         """
-        print("Getting images ...\n")
-        cache_dir = os.path.join(self.dir_path, 'cache')
 
-        # Create cache directory
-        if not os.path.isdir(cache_dir):
-            os.mkdir(cache_dir)
+        cache_tag_dir = self._create_cache_dir(tags)
+        version, name, cache_exists = self._check_cache_info(
+            tags, cache_version)
+        next_version = version + 1
 
-        cache_path = os.path.join(
-            cache_dir, '-'.join(sorted(tags)) + '.config')
-
-        cache_exists = os.path.isfile(cache_path)
-
-        # Make sure the cache folder exists
-        if update or not cache_exists:
+        # Cache not found, get images from the database
+        if not use_cache or not cache_exists:
             # Find image id by given conditions
             images_list = self._get_images_id_from_database(
-                tags, img_type, threshold, use_count, limit)
+                tags, img_type, use_count, limit)
 
-            print("Get images list from database!")
+            print("Getting images list from database!")
 
         else:
             # Read from local cache
-            # For example, .cats.config, .cats-orange.config
+            cache_path = os.path.join(
+                cache_tag_dir, f'{version}-{name}.config')
+
             cached_list = self._read_downloaded_cache(cache_path)
+
             print("Reading Cached list!")
             print(f"{len(cached_list)} images cached!\n")
 
             if(len(cached_list) < limit):
                 images_list = self._get_images_id_from_database(
-                    tags, img_type, threshold, use_count, limit)
+                    tags, img_type, use_count, limit)
             else:
                 images_list = cached_list
 
         # print(images_list)
 
         # Compare with the downloaded list (all images)
-        downloaded_list = self._get_dir_images_list()
+        downloaded_list = self._get_downloaded_images_list()
 
         # print(downloaded_list)
 
@@ -195,37 +193,108 @@ class PicDB:
 
         # Save images based on their ids
         for image in download_images:
+            image_id = str(image['_id'])
+            image_type = image['img_type']
             path = os.path.join(
-                self.dir_path, image["img_id"] + '.' + image["img_type"])
+                self.dir_path, f'{image_id}.{image_type}')
             print(
-                f'Downloading image: {image["img_id"]}.{image["img_type"]} ...')
+                f'Downloading image: {image_id}.{image_type} ...')
             with open(path, "wb") as f:
                 f.write(image["content"])
 
         # Save cache ids in local database
         if create_cache:
-            all_images_list = images_list
-            # print(all_images_list)
-            self._store_downloaded_cache(all_images_list, cache_path)
+            self._store_downloaded_cache(images_list, cache_path)
 
         # TODO: Increment credits 1 for each image
 
-    def _get_images_id_from_database(self, tags, img_type, threshold, use_count, limit):
+    def _create_cache_dir(self, tags):
+        # Make sure the main cache directory exists
+        # Create cache directory -- .picdb/images/cache
+        cache_dir = os.path.join(self.dir_path, 'cache')
+
+        if not os.path.isdir(cache_dir):
+            os.mkdir(cache_dir)
+
+        # Make sure the tags cache directory exists
+        # Create cache directory -- ex: .picdb/images/cache/cats-orange/
+        cache_tag_dir = os.path.join(cache_dir, '-'.join(sorted(tags)))
+
+        if not os.path.isdir(cache_tag_dir):
+            os.mkdir(cache_tag_dir)
+
+        self.cache_dir = cache_dir
+        self.cache_tag_dir = cache_tag_dir
+
+        return cache_tag_dir
+
+    def _check_cache_info(self, tags, cache_version):
+        """
+        Cache file name is of version-name.config convention
+
+        Use version to find cache, cache name is only for usability
+        """
+        version_name_list = self.get_all_cache_version(tags)
+
+        for version, name in version_name_list:
+            # Find a matched version
+            if version == cache_version:
+                print(f'Find cache version: {version} -- name: {name}')
+                return version, name, True
+
+        # Not found, return the latest version
+        return 0, "latest", False
+
+    def get_all_cache_version(self, tags):
+        """
+        Cache file name is of version-name.config convention
+        """
+        tags_path = '-'.join(sorted(tags))
+        cache_tag_dir = os.path.join(
+            self.dir_path, 'cache', tags_path)
+
+        sorted_dir_list = sorted([path.split('.')[0]
+                                  for path in os.listdir(cache_tag_dir)])
+
+        version_name_list = [path.split('-') for path in sorted_dir_list]
+
+        return version_name_list
+
+    def list_all_cache_version(self, tags):
+        version_name_list = self.get_all_cache_version(tags)
+
+        tags_label = ' '.join(tags)
+        if len(version_name_list) == 0:
+            print(f'No Cache for [{tags_label}] now!')
+            return
+
+        print(f"Cache for [{tags_label}]: ")
+        for version, name in version_name_list:
+            print(f'Version: {version} -- Name: {name}')
+
+    def _create_latest_config(self, cache_tag_dir):
+        cache_file_path = os.path.join(cache_tag_dir, 'latest.config')
+
+        with open(cache_file_path, "wb") as f:
+            pickle.dump([], f)
+
+    def _get_images_id_from_database(self, tags, img_type, use_count, limit):
         # TODO: add code to query server index first
         # TODO: server may implement several level indexing
         images = self.collection.find(
             {"tags": {"$all": tags},
-             "img_type": img_type},
-            {"img_id": 1,
-             "_id": 0}).limit(limit)
+             "img_type": img_type,
+             "use_count": {"$gt": use_count}},
+            {"img_id": 1}).limit(limit)
 
-        images_list = [image['img_id'] for image in images]
+        images_list = [str(image['_id']) for image in images]
 
         return images_list
 
     def _get_images_content_from_database(self, images_list):
+        id_list = [ObjectId(id) for id in images_list]
         images = self.collection.find(
-            {"img_id": {"$in": images_list}}, {"img_id": 1, "content": 1, "img_type": 1, "_id": 0})
+            {"_id": {"$in": id_list}}, {"img_id": 1, "content": 1, "img_type": 1})
 
         images_list = [image for image in images]
 
@@ -244,7 +313,7 @@ class PicDB:
 
         return downloaded_cache
 
-    def _get_dir_images_list(self):
+    def _get_downloaded_images_list(self):
         _, _, filenames = next(walk(self.dir_path))
 
         images_list = [filename.split('.')[0] for filename in filenames]
@@ -258,21 +327,46 @@ class PicDB:
         print('Closing Database connection ...')
         self.connection.close()
 
+    def use_images(self, step=1):
+        pass
+
+    def check_connection(self, uri):
+        # Establish a connection to the database
+        try:
+            self.connection = MongoClient(uri)
+            print("Successfully connected!\n")
+        except:
+            print("Cannot connect to mongodb!")
+
 
 def test_download():
     pass
 
 # Other TODOs:
+# Implement versioning cache on the client side
 # Compute hash for each upload to prevent duplicate images
 # Add 2 level index in database to improve data quality, should put all document in a collection
 # We may first check the number of images downloaded before asking databases
 # Can try to publish this api as a pypi package
 # Up vote mechanism to improve visibility of new images
 # May consider to wrap setup environment in docker
+# Do some visualization features
+# Add a cli interface
+# Add complete documentation of this apis
+# Implement use_images for user to use
+# Use image can let user to enter how many they want to use per steop
+
+
+def test_cache_list():
+    pic_db = PicDB()
+    pic_db.init()
+    pic_db.list_all_cache_version(["cats", "orange"])
+    # pic_db.list_all_cache_version(["orange", "cats"])
 
 
 if __name__ == '__main__':
-    pic_db = PicDB()
-    pic_db.init()
-    pic_db.get_images(limit=150)
-    pic_db.close_connection()
+    # pic_db = PicDB()
+    # pic_db.init()
+    # pic_db.get_images(limit=150)
+    # pic_db.close_connection()
+    test_cache_list()

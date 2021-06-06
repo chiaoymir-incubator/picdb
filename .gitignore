@@ -2,4 +2,4 @@ venv
 dataset
 test-store
 test-image
-picdb
+.picdb
