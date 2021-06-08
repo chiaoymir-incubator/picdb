@@ -15,10 +15,10 @@ images_collection #是DB的照片Collection，funtion裡面會用到
 def upload_one_new_image(img_path, up_loader, tags_list_like=[], description="null")
 def upload_file_of_new_images(img_file_path, up_loader, tags_list_like=[], description="null")
 ```
-*img_path : string 圖片路徑
-*up_loader : string 誰上傳的或是專案名稱
-*tags_list_like : list of string 給他的tag 
-*description : string 對他的其他描述
+* img_path : string 圖片路徑
+* up_loader : string 誰上傳的或是專案名稱
+* tags_list_like : list of string 給他的tag 
+* description : string 對他的其他描述
 範例
 ```python
 upload_one_new_image("./images/5.jpg", "Andy", ["room", "white"], "my restroom")
