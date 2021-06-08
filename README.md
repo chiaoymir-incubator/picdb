@@ -50,6 +50,7 @@ Select image ID :
 
 ### show_summary
 顯示整個database的資訊(tag數量最多的前n名、新增tag次數前n多的使用者、含有多少張影像)，如下圖
+![](./img/img.png)
 
 
 
