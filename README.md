@@ -19,7 +19,7 @@ def upload_file_of_new_images(img_file_path, up_loader, tags_list_like=[], descr
 * up_loader : string 誰上傳的或是專案名稱
 * tags_list_like : list of string 給他的tag 
 * description : string 對他的其他描述
-範例
+
 ```python
 upload_one_new_image("./images/5.jpg", "Andy", ["room", "white"], "my restroom")
 upload_file_of_new_images("./images2", "Andy", ["andy", "young"], "myself but younger")
