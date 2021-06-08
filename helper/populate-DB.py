@@ -73,7 +73,7 @@ def main():
             more_tags = pokemon_tags
 
         for filename in filenames:
-            type = filename.split('.')[-1]
+            img_type = filename.split('.')[-1]
             uploader = uploaders[random.randint(0, 9)]
 
             # Choose some additional tags
@@ -99,7 +99,7 @@ def main():
             print(f'Adding {filename} to uploading list...')
 
             doc = {"content": encoded, "description": description, "logs": [
-            ], "type": type, "use_count": use_count, "uploader": uploader, "tags": tags, "credits": credits}
+            ], "img_type": img_type, "use_count": use_count, "uploader": uploader, "tags": tags, "credits": credits}
 
             images_list.append(doc)
 
