@@ -22,6 +22,10 @@ def upload_one_new_image(img_path, up_loader, tags_list_like=[], description="nu
     image_bytes = io.BytesIO()
     im.save(image_bytes, format=im.format)
 
+    if images_collection.find_one({"content": image_bytes.getvalue()}) != None:
+        print("Already exist!")
+        return
+
     # create initial credits for tags and create initial logs for new image
     credits_for_tags = {}
     logs_for_new_image = []
