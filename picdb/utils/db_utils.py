@@ -2,6 +2,30 @@ from bson.objectid import ObjectId
 
 
 def get_images_id_from_database(db, tags, img_type, use_count, limit):
+    """
+    Get image id list from database given some conditions.
+
+    Parameters:
+    ----------
+    tags: 
+        the tags to select image
+
+    img_type:
+        jpg or png
+
+    use_count:
+        the use count threshould for this query
+
+    limit:
+        the maximal images number to return
+
+    Returns:
+    ----------
+    images_list:
+        the images list given those conditions
+
+    """
+    # First find intersection of each tag index in the databases
     all_tags_list = []
 
     for tag in tags:
@@ -19,13 +43,14 @@ def get_images_id_from_database(db, tags, img_type, use_count, limit):
 
     id_list = set(all_tags_list[0]).intersection(*all_tags_list[1:])
 
+    # Second, check whether we have to fetch more images from default image pool
     if len(id_list) == limit:
         print("Get images from index!")
         images_list = id_list
 
     else:
-        print("Not enough images!")
-        print("Try to find more in the image pool!")
+        print("Not enough images from index!")
+        print("Try to find more in the default image pool!")
         coll = db.images
         # Then to find other images from the default image pool
         images = coll.find(
@@ -40,6 +65,7 @@ def get_images_id_from_database(db, tags, img_type, use_count, limit):
 
 
 def get_images_content_from_database(db, images_list):
+    """Get images content based on given image id list"""
     id_list = [ObjectId(id) for id in images_list]
     coll = db.images
     images = coll.find(

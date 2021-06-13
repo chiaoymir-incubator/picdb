@@ -3,6 +3,7 @@ import pickle
 
 
 def create_cache_dir(dir_path, tags):
+    """Create default cache directory"""
     # Make sure the main cache directory exists
     # Create cache directory -- .picdb/images/cache
     cache_dir = get_cache_dir(dir_path)
@@ -21,10 +22,12 @@ def create_cache_dir(dir_path, tags):
 
 
 def get_cache_dir(dir_path):
+    """Get main root cache directoy path"""
     return os.path.join(dir_path, 'cache')
 
 
 def get_cache_tag_dir(cache_dir, tags):
+    """Get tags cache directory path"""
     return os.path.join(cache_dir, '-'.join(sorted(tags)))
 
 
@@ -41,6 +44,7 @@ def get_etl_path(dir_path, tags):
 
 
 def get_cache_file_path(dir_path, tags, version, name):
+    """Get the cache file path given tags, version and name"""
     cache_tag_dir = get_cache_path(dir_path, tags)
     cache_path = os.path.join(
         cache_tag_dir, f'{version}-{name}.config')
@@ -49,6 +53,7 @@ def get_cache_file_path(dir_path, tags, version, name):
 
 
 def make_cache_info(images_list, tags, img_type, use_count, limit):
+    """Make cache info object and return"""
     cache_info = {
         "images_list": images_list,
         "tags": tags,
@@ -61,6 +66,15 @@ def make_cache_info(images_list, tags, img_type, use_count, limit):
 
 
 def get_cache_info(dir_path, tags, cache_version):
+    """
+    Get cache information provided tags and cache_version
+
+    Returns:
+    ==========
+    downloaded_cache: dict
+        includes images id list, tags, img_type, use_count and limit
+
+    """
     version_name_list = get_all_cache_version(dir_path, tags)
 
     for version, name in version_name_list:
@@ -77,11 +91,7 @@ def get_cache_info(dir_path, tags, cache_version):
 
 
 def check_cache_info(dir_path, tags, cache_version):
-    """
-    Cache file name is of version-name.config convention
-
-    Use version to find cache, cache name is only for usability
-    """
+    """Use version to find cache, if exist, return that version, else default to 0-latest"""
     version_name_list = get_all_cache_version(dir_path, tags)
 
     for version, name in version_name_list:
@@ -95,9 +105,7 @@ def check_cache_info(dir_path, tags, cache_version):
 
 
 def get_all_cache_version(dir_path, tags):
-    """
-    Cache file name is of version-name.config convention
-    """
+    """Get a version-label list of cache name for given tags"""
     try:
         tags_path = '-'.join(sorted(tags))
         cache_tag_dir = os.path.join(
@@ -115,6 +123,7 @@ def get_all_cache_version(dir_path, tags):
 
 
 def list_all_cache_version(dir_path, tags):
+    """List all cache version for some given tags"""
     try:
         version_name_list = get_all_cache_version(dir_path, tags)
 
@@ -131,17 +140,20 @@ def list_all_cache_version(dir_path, tags):
 
 
 def get_next_cache_version(dir_path, tags):
+    """Get the next cache version, which is the next integer of the newest cache version in the directory now"""
     version_name_list = get_all_cache_version(dir_path, tags)
 
     return len(version_name_list)
 
 
 def store_downloaded_cache(store_cache, cache_file_path):
+    """Store cache on given path"""
     with open(cache_file_path, "wb") as f:  # Pickling
         pickle.dump(store_cache, f)
 
 
 def read_downloaded_cache(cache_file_path):
+    """Read downloaded cache on given path"""
     if not os.path.isfile(cache_file_path):
         return []
 

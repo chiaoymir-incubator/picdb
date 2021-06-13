@@ -3,3 +3,5 @@ dataset
 test-store
 test-image
 .picdb
+.DS_Store
+__pycache__/
