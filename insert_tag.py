@@ -1,6 +1,7 @@
 from enum import auto
 import pymongo
 import bson.binary
+from bson.objectid import ObjectId
 from pymongo import MongoClient
 from io import BytesIO
 from PIL import Image
@@ -15,6 +16,13 @@ class ImageDB(object):
         self.db = self.client[db_name]
         self.collection = self.db[image_coll]
         self.log_collection = self.db[log_coll]
+        self.id_list = self.get_object_id()
+
+    def get_object_id(self):
+        id_list =[]
+        for x in self.collection.find({},{ "_id": 1}):
+            id_list.append(x['_id'])
+        return id_list
 
     def insert_tag(self):
         print("Select image ID to insert the tag : ", end='')
@@ -26,12 +34,13 @@ class ImageDB(object):
         print("Image ID : {}".format(image_id))
         print("Tagging : {}".format(tag))
         print("User : {}".format(user))
-        print("Press Y to continue the tagging or press N to cancel")
+        print("Input Y to continue the tagging or N to cancel", end=' ')
+        command = input()
         while True:
-            if keyboard.is_pressed("y"):
+            if command == "y":
                 image_id = image_id.split(' ')
                 for id in image_id:
-                    documents = self.collection.find({'img_id':id})
+                    documents = self.collection.find({'_id':self.id_list[int(id)-1]})
                     result = list(documents)
                     if len(result) == 0:
                         print("Image ID {} is not exist !".format(id))
@@ -45,11 +54,11 @@ class ImageDB(object):
                     update_log = { "$set": { "logs": log } }
                     self.collection.update_one(myquery, add_tag)
                     self.collection.update_one(myquery, update_log)
-                    self.log_collection.insert_one({'tag':tag, 'user':user, 'image_id':id})
+                    self.log_collection.insert_one({'tag':tag, 'user':user, '_id':self.id_list[int(id)-1]})
                     print("Image ID {} is tagged successfully！".format(id))
                 print()
                 break
-            elif keyboard.is_pressed("n"):
+            elif command == 'n':
                 print("Cancel the tagging")
                 print()
                 break
@@ -70,8 +79,8 @@ class ImageDB(object):
             print()
 
     def show_information(self):
-        image_id = input("Select image ID : ")
-        documents = self.collection.find({"img_id": image_id},{"content": 0})
+        image_id = int(input("Select image ID : "))
+        documents = self.collection.find({"_id": self.id_list[image_id-1]},{"content": 0})
         result = list(documents)
         if len(result) == 0:
             print("Image ID is not exist !")
@@ -83,7 +92,7 @@ class ImageDB(object):
         # TODO: tag_visualize, user 
         total_image = self.collection.count_documents({})
         top_num = 3
-        fig = plt.figure()
+        fig = plt.figure(figsize=(8, 4))
         fig.suptitle('There are {} images in database'.format(total_image))
         ax1 = fig.add_subplot(121)
         ax2 = fig.add_subplot(122)
@@ -112,28 +121,30 @@ class ImageDB(object):
         print()
 
     def show_instruction(self):
-        print("Press s to show the image from image_id")
-        print("Press i to insert the tag of image")
-        print("Press p to see the information of the image")
-        print("Press a to show the summary of the database")
-        print("Press q to quit")
+        print("Input s to show the image from image_id")
+        print("Input i to insert the tag of image")
+        print("Input p to see the information of the image")
+        print("Input a to show the summary of the database")
+        print("Input q to quit")
 
     def get_command(self):
+        command = input()
         while True:
-            if keyboard.is_pressed("s"):
+            if command == "s":
                 self.show_image()
                 self.show_instruction()
-            elif keyboard.is_pressed("i"):
+            elif command == "i":
                 self.insert_tag()
                 self.show_instruction()
-            elif keyboard.is_pressed("p"):
+            elif command == "p":
                 self.show_information()
                 self.show_instruction()
-            elif keyboard.is_pressed("a"):
+            elif command == "a":
                 self.show_summary()
                 self.show_instruction()
-            elif keyboard.is_pressed("q"):
+            elif command == "q":
                 break
+            command = input()
             
 def main():
     db_name = 'demo'
