@@ -97,6 +97,63 @@ class PicDB:
             upload_one_new_image(img_file_path + img, up_loader,
                              tags_list_like, description)
 
+    def show_image(self):
+        image_id = input("Select image ID to visualize : ")
+        documents = self.collection.find({'img_id':image_id})
+        result = list(documents)
+        if len(result) == 0:
+            print("Image ID is not exist !")
+            print()
+        else:
+            image_data = result[0]['content']
+            image = Image.open(BytesIO(image_data))
+            plt.imshow(image)
+            plt.axis('off')
+            plt.show()
+            print()
+
+    def show_information(self, image_id):
+        documents = self.collection.find({"_id": image_id},{"content": 0})
+        result = list(documents)
+        if len(result) == 0:
+            print("Image ID is not exist !")
+        else:
+            print(result[0])
+            print()
+
+    def show_summary(self):
+        # TODO: tag_visualize, user 
+        total_image = self.collection.count_documents({})
+        top_num = 3
+        fig = plt.figure(figsize=(8, 4))
+        fig.suptitle('There are {} images in database'.format(total_image))
+        ax1 = fig.add_subplot(121)
+        ax2 = fig.add_subplot(122)
+        all_tag = self.log_collection.distinct('tag')
+        all_user = self.log_collection.distinct('user')
+        # calculate the number of each tag
+        tag_count = []
+        for tag in all_tag:
+            tag_num = self.log_collection.count_documents({'tag': tag})
+            tag_count.append([tag, tag_num])
+        tag_count = sorted(tag_count, key=lambda x: x[1], reverse=True)
+        tag_count = pd.DataFrame(tag_count[:top_num], columns=['Tag_name', 'Tag_count'])
+        sns.barplot(x='Tag_name', y='Tag_count', data=tag_count, ax=ax1)
+        ax1.set_title('Top {} tags in database'.format(top_num), fontsize=8)
+
+        # calculate the number of the user who add the tag
+        user_count = []
+        for user in all_user:
+            user_num = self.log_collection.count_documents({'user': user})
+            user_count.append([user, user_num])
+        user_count = sorted(user_count, key=lambda x: x[1], reverse=True)
+        user_count = pd.DataFrame(user_count[:top_num], columns=['User_name', 'Number'])
+        sns.barplot(x='User_name', y='Number', data=user_count, ax=ax2)
+        ax2.set_title('Top {} users to insert tag'.format(top_num), fontsize=8)
+        plt.show()
+        print()
+
+
     def get_images(self, tags, img_type="jpg", use_count=-1,
                    limit=10, use_cache=True, cache_version=0,
                    next_cache_name="latest"):
