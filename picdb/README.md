@@ -1,35 +1,92 @@
-# Download APIs
+# APIs
 
 ## Basic methods
 
 - `init()`: Initialized configuration and database connection
+
+## Upload
+
+- `upload_one_new_image()`: Upload an image with some tags and informations .
+- `upload_file_of_new_images()`: Upload all images in the given file.
+
+## Feedback
+
+- `feedback()`: Given some _id and tags, increase(decrease) their tags credits. 
+- `feedback_folder()`: Given a file path and tags, increase(decrease) their tags credits. 
+
+## Search
+
+- `show_image(image_id)`: Display the image of given image_id.
+- `show_information(image_id)`: Display the information of given image_id.
+- `show_summary()`:Display the overall informations of the database.
+
+[![img](https://github.com/yobekili/DB_Final/raw/tagging/img/img.png)](https://github.com/yobekili/DB_Final/blob/tagging/img/img.png)
+
+## Download
+
 - `get_images()`: Given a list of tags, return a set of images and save in the local image pool. You can also specify some other filter conditions. Further more, you can specify a version-name pair that can be used to save into you local cache. The cache store a list of id in that query.
 - `move_images()`: Move some images to another user directory.
 
 ## Examples
+
 ```python
 # Initialize instance
 pic_db = PicDB()
 pic_db.init()
 ```
+
+
+
+```python
+# Upload a picture
+pic_db.upload_one_new_image(img_path='./cat.jpeg', up_loader='Jason', tags_list_like=['cat', 'cute'], description="a cute cat")
+
+# Upload all pictures in ./animal
+pic_db.upload_file_of_new_images(img_path='./animal', up_loader='Jason', tags_list_like=['cat', 'cute'], description="a cute cat")
+```
+
+
+
+```python
+# Give a positive feedback to image 60c31d90ad37464e2742b2d1
+pic_db.feedback(user='Jason', tags=['animal'], ids=['60c31d90ad37464e2742b2d1'], positive_feedback=True)
+
+# Give a positive feedback to all images in ./cat
+pic_db.feedback_folder(user='Jason', tags=['animal'], filepath='./cat', positive_feedback=True):
+```
+
+
+
+```python
+# Display the image of '60c31d90ad37464e2742b2d1'
+pic_db.show_image('60c31d90ad37464e2742b2d1')
+
+# Display the information of '60c31d90ad37464e2742b2d1'
+pic_db.show_information('60c31d90ad37464e2742b2d1')
+
+# Display the overall informations of the database.
+pic_db.show_summary()
+```
+
+
+
 ```python
 # Get images with the latest cache
 pic_db.get_images(["catas"], limit=20)
-```
-```python
+
 # Get images from database and label the new cache version
 pic_db.get_images(["cat", "orange"], use_cache=False, next_cache_name="exp1", limit=20)
-```
-```python
+
 # Get images from a labeled cache
 pic_db.get_images(["meme", "cat"], cache_version=2)
-```
-```python
+
 # Move images from downloaded pool to another user directory
 pic_db.move_images(["meme", "cat"], '../test-image', True, 2)
 ```
 
+
 ## Project Structure
+
 - picdb: 
   - images/cache_dir.png
   - utils: 
@@ -84,5 +141,4 @@ The program will also check the integrity of the images number specified in the 
 
 ### Move images
 The user are required to pass a specific version to the `move_images()` function, the default one is 0 (latest one). We will first get the given cache information and then determine how many images we have to move. If the user directory has some images moved befored, we will filter them out. The last step is just copy those needed to move to the user directory.
-
 
