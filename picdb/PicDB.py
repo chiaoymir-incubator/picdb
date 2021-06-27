@@ -1,8 +1,15 @@
 import os
+import io
+from io import BytesIO
 from os import walk
 
 from pymongo import MongoClient
+from bson.objectid import ObjectId
 from PIL import Image
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
 
 from utils.dir_utils import get_home_path, get_store_path, get_dir_path
 
@@ -20,13 +27,13 @@ class PicDB:
     def __init__(self):
         self.db_name = 'picdb'
         self.db_collection = 'images'
-
+        self.db_log_collection = 'logs'
+        self.threshold = 100
     def init(self, uri='mongodb://localhost:27017/'):
         """Initialize database connection and member variable setup"""
         self.home_path = get_home_path()
         self.store_path = get_store_path(self.home_path)
         self.dir_path = get_dir_path(self.store_path)
-
         if not os.path.isdir(self.store_path):
             os.mkdir(self.store_path)
 
@@ -44,8 +51,9 @@ class PicDB:
 
         self.db = self.connection[self.db_name]
         self.collection = self.db[self.db_collection]
+        self.log_collection = self.db[self.db_log_collection]
 
-    def upload_one_new_image(img_path, up_loader, tags_list_like=[], description="null"):
+    def upload_one_new_image(self, img_path, up_loader, tags_list_like=[], description="null"):
 
         # get one image
         im = Image.open(img_path)
@@ -58,48 +66,47 @@ class PicDB:
             print("Already exist!")
             return
 
-        # create initial credits for tags and create initial logs for new image
+        # create initial credits for tags
         credits_for_tags = {}
         logs_for_new_image = []
         if len(tags_list_like) != 0:
             for i in tags_list_like:
                 if i not in credits_for_tags.keys():
                     credits_for_tags[i] = 1
-                else:
-                    credits_for_tags[i] = credits_for_tags[i] + 1
-                logs_for_new_image.append("add|" + i + "|" + up_loader)
         else:
             credits_for_tags["image"] = 1
-            logs_for_new_image.append("add|image|" + up_loader)
 
         # create one record (row) for table
         image = {
             "content": image_bytes.getvalue(),
             "description": description,
-            "logs": logs_for_new_image,
             "img_type": str(im.format),
             "use_count": 0,
             "uploader": up_loader,
-            "tags": tags_list_like,
-            "credits": credits_for_tags
+            "tags": credits_for_tags
         }
 
         # insert the data into the collection
         image_id = self.collection.insert_one(image).inserted_id
         print("upload ", img_path.split("/")[-1], " is done!")
 
-    def upload_file_of_new_images(img_file_path, up_loader, tags_list_like=[], description="null"):
+        #update logs
+        for tag in credits_for_tags:
+            self.log_collection.insert_one({'tag':tag, 'user':up_loader, '_id':image_id})
+
+    def upload_file_of_new_images(self, img_file_path, up_loader, tags_list_like=[], img_type=[], description="null"):
         allImagesList = os.listdir(img_file_path)
         if img_file_path[-1] != "/":
             img_file_path = img_file_path + "/"
 
         for img in allImagesList:
-            upload_one_new_image(img_file_path + img, up_loader,
-                             tags_list_like, description)
+            s = img.split('.')
+            if s[-1] in img_type:
+                self.upload_one_new_image(img_file_path + img, up_loader, tags_list_like, description)
 
-    def show_image(self):
-        image_id = input("Select image ID to visualize : ")
-        documents = self.collection.find({'img_id':image_id})
+
+    def show_image(self, image_id):
+        documents = self.collection.find({'_id': ObjectId(image_id)})
         result = list(documents)
         if len(result) == 0:
             print("Image ID is not exist !")
@@ -113,7 +120,7 @@ class PicDB:
             print()
 
     def show_information(self, image_id):
-        documents = self.collection.find({"_id": image_id},{"content": 0})
+        documents = self.collection.find({"_id": ObjectId(image_id)},{"content": 0})
         result = list(documents)
         if len(result) == 0:
             print("Image ID is not exist !")
@@ -152,9 +159,65 @@ class PicDB:
         ax2.set_title('Top {} users to insert tag'.format(top_num), fontsize=8)
         plt.show()
         print()
+        
+    def feedback_folder(self, user, tags, filepath, positive_feedback):
+        raw_files = [f for f in listdir(filepath) if isfile(join(filepath, f))]
+        
+        files = []
+        for file in raw_files:
+            item = file.split('.')[0]
+            if item != '': files += [item]
+
+        self.feedback(user, [tags], files, positive_feedback)
+
+    def feedback_all_folder(self, user, filepath, positive_feedback):
+        raw_path = [f for f in listdir(filepath) if isdir(join(filepath, f))]
+        for path in raw_path:
+            self.feedback_folder(user, path, join(filepath, path), positive_feedback)
+
+    def feedback(self, user, tags, ids, positive_feedback):
+        
+        for tag in tags:
+            if not (tag in self.db.list_collection_names()):
+                self.db.create_collection(tag)
+
+            buf = self.db[tag]
+            entity = 'tags.%s' % tag
+            value = 1 if positive_feedback else -1
+            ids = [ObjectId(id) for id in ids]
+
+            self.collection.update_many({'_id' : {'$in': ids}}, {'$inc':{ entity : value}}, upsert=True)
+
+            if positive_feedback:
+                result = self.collection.find({'_id' : {'$in' : ids}, entity : {'$gt' : self.threshold-1}})
+                self.log_collection.update_many({'_id' : {'$in' : ids}}, {'$set':{'tag':tag, 'user': user}}, upsert=True)
+
+                delete_data, insert_data = [], []
+
+                for item in result:
+                    delete_data += [item['_id']]
+                    insert_data += [{'_id' : item['_id']}]
+                print(insert_data)
+                if len(delete_data) != 0 :
+                    buf.delete_many({'_id' : {'$in' : delete_data}})
+                if len(insert_data) != 0 :
+                    buf.insert_many(insert_data)
+
+            else:
+                result = self.collection.find({'_id' : {'$in' : ids}, entity : {'$lt' : self.threshold}})
+
+                delete_data = []
+
+                for item in result:
+                    delete_data += [item['_id']]
+
+                if len(delete_data) == 0 : return 
+                buf.delete_many({'_id' : {'$in' : delete_data}})
+        return
 
 
-    def get_images(self, tags, img_type="jpg", use_count=-1,
+
+    def get_images(self, tags, img_type="JPEG", use_count=-1,
                    limit=10, use_cache=True, cache_version=0,
                    next_cache_name="latest"):
         """
@@ -286,7 +349,7 @@ class PicDB:
         # Convert relative path to absolute path
         if relative:
             dst_path = os.path.abspath(dst_path)
-
+        print(dst_path)
         _, _, filenames = next(walk(dst_path))
 
         # Find images to move
@@ -339,23 +402,5 @@ def test_move_images(tags, dst_path, relative, cache_version):
 
 
 if __name__ == '__main__':
-    # pic_db = PicDB()
-    # pic_db.init()
-    # pic_db.get_images(limit=150)
-    # pic_db.close_connection()
-
-    # tags = ["cat"]
-    # tags = ["orange"]
-    tags = ["cat", 'orange']
-    limit = 20
-    name = "exp3"
-    version = 3
-    dst_path = "../test-image"
-    relative = True
-    cache_version = 1
-
-    # ==== testing
-    # test_get_images(tags, limit)
-    # test_set_new_version(tags, name, limit)
-    test_use_cache_version(tags, version)
-    # test_move_images(tags, dst_path, relative, cache_version)
+    pic_db = PicDB()
+    pic_db.init()
