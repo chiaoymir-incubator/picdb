@@ -374,33 +374,6 @@ class PicDB:
             except FileNotFoundError:
                 print(f'Image: {image_name} not found!')
 
-
-def test_get_images(tags, limit):
-    pic_db = PicDB()
-    pic_db.init()
-    pic_db.get_images(tags, limit=limit)
-
-
-def test_set_new_version(tags, name, limit):
-    pic_db = PicDB()
-    pic_db.init()
-    # Get images from databases
-    pic_db.get_images(tags, use_cache=False,
-                      next_cache_name=name, limit=limit)
-
-
-def test_use_cache_version(tags, cache_version):
-    pic_db = PicDB()
-    pic_db.init()
-    pic_db.get_images(tags, cache_version=cache_version)
-
-
-def test_move_images(tags, dst_path, relative, cache_version):
-    pic_db = PicDB()
-    pic_db.init()
-    pic_db.move_images(tags, dst_path, relative, cache_version)
-
-
 if __name__ == '__main__':
     pic_db = PicDB()
     pic_db.init()
